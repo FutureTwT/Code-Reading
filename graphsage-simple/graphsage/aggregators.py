@@ -22,12 +22,15 @@ class MeanAggregator(nn.Module):
         """
 
         super(MeanAggregator, self).__init__()
-
+        # features是一个nn的函数
         self.features = features
         self.cuda = cuda
         self.gcn = gcn
         
     def forward(self, nodes, to_neighs, num_sample=10):
+        # nodes: 节点列表
+        # to_neighs: 集合的列表，每一个列表元素都是一个集合，每一个集合对应nodes中一个节点的邻居
+        # num_sample: 邻居采样数
         """
         nodes --- list of nodes in a batch
         to_neighs --- list of sets, each set is the set of neighbors for node in batch
@@ -35,8 +38,10 @@ class MeanAggregator(nn.Module):
         """
         # Local pointers to functions (speed hack)
         _set = set
+        # 如果num_sample设置了具体数字就进行随机抽样
         if not num_sample is None:
             _sample = random.sample
+            # 首先对每一个节点的邻居集合neigh进行遍历，判断一下已有邻居数和采样数大小，多于采样数进行抽样
             samp_neighs = [_set(_sample(to_neigh, 
                             num_sample,
                             )) if len(to_neigh) >= num_sample else to_neigh for to_neigh in to_neighs]
@@ -44,20 +49,35 @@ class MeanAggregator(nn.Module):
             samp_neighs = to_neighs
 
         if self.gcn:
+            # 在邻居节点中添加自身节点（增加自环）
             samp_neighs = [samp_neigh + set([nodes[i]]) for i, samp_neigh in enumerate(samp_neighs)]
+        # *拆解列表后，转为为多个独立的元素作为参数给union，union函数进行去重合并
         unique_nodes_list = list(set.union(*samp_neighs))
+        # 节点标号不一定都是从0开始的，创建一个字典，key为节点ID，value为节点序号
         unique_nodes = {n:i for i,n in enumerate(unique_nodes_list)}
+        # print(len(nodes), len(unique_nodes), len(samp_neighs))
+        # nodes表示batch内的节点，unique_nodes表示batch内的节点用到的所有邻居节点，unique_nodes >= nodes
+        # 创建一个nodes * unique_nodes大小的矩阵
         mask = Variable(torch.zeros(len(samp_neighs), len(unique_nodes)))
-        column_indices = [unique_nodes[n] for samp_neigh in samp_neighs for n in samp_neigh]   
+        # 遍历每一个邻居集合的每一个元素，并且通过ID(key)获取到节点对应的序号--列切片
+        column_indices = [unique_nodes[n] for samp_neigh in samp_neighs for n in samp_neigh]
+        # 行切片，比如samp_neighs = [{3,5,9}, {2,8}, {2}]，行切片为[0,0,0,1,1,2]
         row_indices = [i for i in range(len(samp_neighs)) for j in range(len(samp_neighs[i]))]
+        # 利用切片创建邻接矩阵
         mask[row_indices, column_indices] = 1
         if self.cuda:
             mask = mask.cuda()
+        # 统计每一个节点的邻居数量
         num_neigh = mask.sum(1, keepdim=True)
+        # 分比例
         mask = mask.div(num_neigh)
+        # embed_matrix: [n, m]
+        # n: unique_nodes
+        # m: dim
         if self.cuda:
             embed_matrix = self.features(torch.LongTensor(unique_nodes_list).cuda())
         else:
             embed_matrix = self.features(torch.LongTensor(unique_nodes_list))
+        # mean操作
         to_feats = mask.mm(embed_matrix)
         return to_feats
