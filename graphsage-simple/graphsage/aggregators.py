@@ -12,7 +12,7 @@ class MeanAggregator(nn.Module):
     """
     Aggregates a node's embeddings using mean of neighbors' embeddings
     """
-    def __init__(self, features, cuda=False, gcn=False): 
+    def __init__(self, features, cuda=False, gcn=False):
         """
         Initializes the aggregator for a specific graph.
 
@@ -22,7 +22,7 @@ class MeanAggregator(nn.Module):
         """
 
         super(MeanAggregator, self).__init__()
-        # features是一个nn的函数
+        # features是一个嵌入查找表
         self.features = features
         self.cuda = cuda
         self.gcn = gcn
@@ -47,7 +47,6 @@ class MeanAggregator(nn.Module):
                             )) if len(to_neigh) >= num_sample else to_neigh for to_neigh in to_neighs]
         else:
             samp_neighs = to_neighs
-
         if self.gcn:
             # 在邻居节点中添加自身节点（增加自环）
             samp_neighs = [samp_neigh + set([nodes[i]]) for i, samp_neigh in enumerate(samp_neighs)]
@@ -74,10 +73,13 @@ class MeanAggregator(nn.Module):
         # embed_matrix: [n, m]
         # n: unique_nodes
         # m: dim
+        print('mask: ', mask.size())
         if self.cuda:
             embed_matrix = self.features(torch.LongTensor(unique_nodes_list).cuda())
         else:
             embed_matrix = self.features(torch.LongTensor(unique_nodes_list))
         # mean操作
+        print('mask2:', mask.size())
         to_feats = mask.mm(embed_matrix)
+        # print(to_feats.size())
         return to_feats
