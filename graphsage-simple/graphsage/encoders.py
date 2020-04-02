@@ -13,11 +13,14 @@ class Encoder(nn.Module):
             base_model=None, gcn=False, cuda=False, 
             feature_transform=False): 
         super(Encoder, self).__init__()
-
+        # nn.Embedding
         self.features = features
+        # 特征维度
         self.feat_dim = feature_dim
+        # 邻接矩阵
         self.adj_lists = adj_lists
         self.aggregator = aggregator
+        # 采样个数
         self.num_sample = num_sample
         if base_model != None:
             self.base_model = base_model
@@ -28,7 +31,7 @@ class Encoder(nn.Module):
         self.aggregator.cuda = cuda
         self.weight = nn.Parameter(
                 torch.FloatTensor(embed_dim, self.feat_dim if self.gcn else 2 * self.feat_dim))
-        init.xavier_uniform(self.weight)
+        init.xavier_uniform_(self.weight)
 
     def forward(self, nodes):
         """
@@ -36,8 +39,10 @@ class Encoder(nn.Module):
 
         nodes     -- list of nodes
         """
+        # 利用Encoder的forward调用聚合层的forward函数
         neigh_feats = self.aggregator.forward(nodes, [self.adj_lists[int(node)] for node in nodes], 
                 self.num_sample)
+        # 没有设置GCN
         if not self.gcn:
             if self.cuda:
                 self_feats = self.features(torch.LongTensor(nodes).cuda())
